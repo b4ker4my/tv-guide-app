@@ -1,0 +1,636 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  Search, 
+  Plus, 
+  Trash2, 
+  Filter, 
+  Tv, 
+  User, 
+  Users, 
+  CheckCircle, 
+  Calendar,
+  X,
+  Clock,
+  Info,
+  Download,
+  Share2,
+  Check,
+  Settings,
+  Heart,
+  Star,
+  Coffee,
+  Smile,
+  Gamepad,
+  Flame,
+  Pencil,
+  Save
+} from 'lucide-react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getFirestore, 
+  collection, 
+  onSnapshot, 
+  doc, 
+  deleteDoc, 
+  addDoc,
+  updateDoc,
+  writeBatch
+} from 'firebase/firestore';
+import { 
+  getAuth, 
+  signInAnonymously, 
+  signInWithCustomToken, 
+  onAuthStateChanged 
+} from 'firebase/auth';
+
+// --- Firebase Configuration ---
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'tv-guide-app';
+
+// --- Available Icons for Watchers ---
+const WATCHER_ICONS = {
+  user: User,
+  users: Users,
+  clock: Clock,
+  heart: Heart,
+  star: Star,
+  coffee: Coffee,
+  smile: Smile,
+  gamepad: Gamepad,
+  flame: Flame
+};
+
+// --- Full Initial Data Seed ---
+const INITIAL_SHOWS = [
+  { title: "Rainmaker", streamer: "Peacock", day: "Friday", status: "Airing", category: "Both" },
+  { title: "High Potential", streamer: "Hulu", day: "Tuesday", status: "Returning", category: "Both" },
+  { title: "Tulsa King", streamer: "Paramount", day: "Sunday", status: "Season Break", category: "Both" },
+  { title: "Landman", streamer: "Paramount", day: "Sunday", status: "Airing", category: "Both" },
+  { title: "Dexter: Resurrection", streamer: "Paramount", day: "TBD", status: "Upcoming", category: "Both" },
+  { title: "L&O: Organized Crime", streamer: "Peacock", day: "Thursday", status: "Returning", category: "Both" },
+  { title: "Criminal Minds", streamer: "Paramount", day: "Thursday", status: "Returning", category: "Both" },
+  { title: "Lincoln Lawyer", streamer: "Netflix", day: "N/A", date: "5-Feb", status: "Returning", category: "Both" },
+  { title: "Fire Country", streamer: "Hulu", day: "Friday", status: "Airing", category: "Both" },
+  { title: "The Rookie", streamer: "Hulu", day: "Tuesday", status: "Airing", category: "Both" },
+  { title: "Matlock", streamer: "Hulu", day: "Thursday", status: "Airing", category: "Both" },
+  { title: "Will Trent", streamer: "Hulu", day: "Tuesday", status: "Returning", category: "Both" },
+  { title: "The Hunting Party", streamer: "Peacock", day: "TBD", status: "Upcoming", category: "Both" },
+  { title: "The Pitt", streamer: "Max", day: "TBD", status: "Upcoming", category: "Both" },
+  { title: "His and Hers", streamer: "Netflix", day: "N/A", status: "Upcoming", category: "Both" },
+  { title: "Memory of a Killer", streamer: "Hulu", day: "TBD", status: "Airing", category: "Both" },
+  { title: "Boston Blue", streamer: "Paramount", day: "TBD", status: "Upcoming", category: "Both" },
+  { title: "The Madison", streamer: "Paramount", day: "TBD", status: "Upcoming", category: "Both" },
+  { title: "Big Timber", streamer: "Netflix", day: "N/A", status: "Season Break", category: "Mark" },
+  { title: "Meat Eater", streamer: "Netflix", day: "N/A", status: "Airing", category: "Mark" },
+  { title: "Salvage Kings", streamer: "Hulu", day: "N/A", status: "Airing", category: "Mark" },
+  { title: "Star Trek: Strange New Worlds", streamer: "Paramount", day: "Thursday", status: "Returning", category: "Mark" },
+  { title: "Combat Ships", streamer: "Paramount", day: "N/A", status: "Airing", category: "Mark" },
+  { title: "Air Warriors", streamer: "Paramount", day: "N/A", status: "Airing", category: "Mark" },
+  { title: "Sheriff Country", streamer: "Paramount", day: "Friday", status: "Upcoming", category: "Mark" },
+  { title: "Alive", streamer: "Netflix", day: "N/A", status: "Airing", category: "Mark" },
+  { title: "Law and Order SVU", streamer: "Peacock", day: "Thursday", status: "Airing", category: "Amy" },
+  { title: "Big Little Lies", streamer: "Max", day: "N/A", status: "Returning", category: "Amy" },
+  { title: "Tell Me Lies", streamer: "Hulu", day: "Wednesday", status: "Season Break", category: "Amy" },
+  { title: "Bridgerton", streamer: "Netflix", day: "N/A", status: "Returning", category: "Amy" },
+  { title: "Virgin River", streamer: "Netflix", day: "N/A", status: "Returning", category: "Amy" },
+  { title: "Unlocked", streamer: "Netflix", day: "N/A", status: "Airing", category: "Amy" },
+  { title: "The Perfect Couple", streamer: "Netflix", day: "N/A", status: "Airing", category: "Amy" },
+  { title: "Home Town", streamer: "Hulu", day: "Sunday", status: "Airing", category: "Amy" },
+  { title: "Real Housewives of Orange County", streamer: "Peacock", day: "Thursday", status: "Airing", category: "Amy" },
+  { title: "Real Housewives of Potomac", streamer: "Peacock", day: "Sunday", status: "Airing", category: "Amy" },
+  { title: "Real Housewives of Beverly Hills", streamer: "Peacock", day: "Wednesday", status: "Airing", category: "Amy" },
+  { title: "Below Deck Down Under", streamer: "Peacock", day: "Monday", status: "Returning", category: "Amy" },
+  { title: "The Valley", streamer: "Peacock", day: "Tuesday", status: "Returning", category: "Amy" },
+  { title: "Vanderpump Rules", streamer: "Peacock", day: "Tuesday", status: "Returning", category: "Amy" },
+  { title: "Only Murders in the Building", streamer: "Hulu", day: "Tuesday", status: "Returning", category: "Amy" },
+  { title: "The Secret Lives of Mormon Wives", streamer: "Hulu", day: "N/A", status: "Season Break", category: "Amy" },
+  { title: "Owning Manhattan", streamer: "Netflix", day: "N/A", status: "Airing", category: "Amy" },
+  { title: "Ginny and Georgia", streamer: "Netflix", day: "N/A", status: "Returning", category: "Amy" },
+  { title: "Selling Sunset", streamer: "Netflix", day: "N/A", status: "Airing", category: "Amy" },
+  { title: "The Waterfront", streamer: "Netflix", day: "N/A", status: "Upcoming", category: "Amy" },
+  { title: "Buccaneers", streamer: "Apple TV+", day: "Wednesday", status: "Returning", category: "To Try" },
+  { title: "Silo", streamer: "Apple TV+", day: "Friday", status: "Airing", category: "To Try" },
+  { title: "The Runarounds", streamer: "Prime", day: "TBD", status: "Upcoming", category: "To Try" },
+  { title: "Wayward", streamer: "Netflix", day: "TBD", status: "Upcoming", category: "To Try" },
+  { title: "Wildcards", streamer: "Hulu", day: "Wednesday", status: "Returning", category: "To Try" },
+];
+
+const DEFAULT_CATEGORIES = [
+  { name: 'Both', icon: 'users' },
+  { name: 'Mark', icon: 'user' },
+  { name: 'Amy', icon: 'heart' },
+  { name: 'To Try', icon: 'clock' }
+];
+
+const DEFAULT_SERVICES = [
+  'Netflix', 'Hulu', 'Peacock', 'Paramount', 'Prime', 'Apple TV+', 'Max', 'Disney+'
+];
+
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [shows, setShows] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [services, setServices] = useState([]);
+  
+  const [search, setSearch] = useState('');
+  const [activeTab, setActiveTab] = useState('All');
+  const [streamerFilter, setStreamerFilter] = useState('All');
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState(false);
+  
+  const [newShow, setNewShow] = useState({ 
+    title: '', streamer: 'Netflix', day: '', category: 'Both', date: '', status: 'Airing'
+  });
+  
+  const [newItemName, setNewItemName] = useState({ category: '', service: '' });
+  const [selectedWatcherIcon, setSelectedWatcherIcon] = useState('user');
+  
+  // Editing state for Watchers
+  const [editingWatcher, setEditingWatcher] = useState(null);
+
+  // Handle Authentication
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (err) { console.error("Auth failed", err); }
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, setUser);
+    return () => unsubscribe();
+  }, []);
+
+  // Sync Data from Firestore
+  useEffect(() => {
+    if (!user) return;
+
+    const showsRef = collection(db, 'artifacts', appId, 'public', 'data', 'shows');
+    const catsRef = collection(db, 'artifacts', appId, 'public', 'data', 'categories');
+    const servsRef = collection(db, 'artifacts', appId, 'public', 'data', 'services');
+
+    const unsubShows = onSnapshot(showsRef, (snapshot) => {
+      if (snapshot.empty) {
+        INITIAL_SHOWS.forEach(show => addDoc(showsRef, show));
+      } else {
+        setShows(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      }
+    });
+
+    const unsubCats = onSnapshot(catsRef, (snapshot) => {
+      if (snapshot.empty) {
+        DEFAULT_CATEGORIES.forEach(cat => addDoc(catsRef, cat));
+      } else {
+        setCategories(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      }
+    });
+
+    const unsubServs = onSnapshot(servsRef, (snapshot) => {
+      if (snapshot.empty) {
+        DEFAULT_SERVICES.forEach(name => addDoc(servsRef, { name }));
+      } else {
+        setServices(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      }
+    });
+
+    return () => { unsubShows(); unsubCats(); unsubServs(); };
+  }, [user]);
+
+  const filteredShows = useMemo(() => {
+    return shows.filter(show => {
+      const matchesSearch = (show.title || '').toLowerCase().includes(search.toLowerCase());
+      const matchesTab = activeTab === 'All' || show.category === activeTab;
+      const matchesStreamer = streamerFilter === 'All' || show.streamer === streamerFilter;
+      return matchesSearch && matchesTab && matchesStreamer;
+    });
+  }, [shows, search, activeTab, streamerFilter]);
+
+  const handleAddShow = async (e) => {
+    e.preventDefault();
+    if (!newShow.title) return;
+    try {
+      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'shows'), newShow);
+      setNewShow({ 
+        title: '', 
+        streamer: services[0]?.name || 'Netflix', 
+        day: '', 
+        category: categories[0]?.name || 'Both', 
+        date: '', 
+        status: 'Airing' 
+      });
+      setIsAddModalOpen(false);
+    } catch (err) { console.error(err); }
+  };
+
+  const handleAddItem = async (type, name, iconKey = 'user') => {
+    if (!name) return;
+    const coll = type === 'category' ? 'categories' : 'services';
+    const data = type === 'category' ? { name, icon: iconKey } : { name };
+    try {
+      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', coll), data);
+      setNewItemName({ ...newItemName, [type]: '' });
+      if (type === 'category') setSelectedWatcherIcon('user');
+    } catch (err) { console.error(err); }
+  };
+
+  const handleUpdateWatcher = async (e) => {
+    e.preventDefault();
+    if (!editingWatcher || !editingWatcher.name.trim()) return;
+
+    const oldName = categories.find(c => c.id === editingWatcher.id)?.name;
+    const newName = editingWatcher.name.trim();
+
+    try {
+      // 1. Update the category document
+      const catRef = doc(db, 'artifacts', appId, 'public', 'data', 'categories', editingWatcher.id);
+      await updateDoc(catRef, { name: newName, icon: editingWatcher.icon });
+
+      // 2. If name changed, update all associated shows
+      if (oldName && oldName !== newName) {
+        const affectedShows = shows.filter(s => s.category === oldName);
+        for (const show of affectedShows) {
+          const showRef = doc(db, 'artifacts', appId, 'public', 'data', 'shows', show.id);
+          await updateDoc(showRef, { category: newName });
+        }
+        
+        // Update active tab if we just renamed the current view
+        if (activeTab === oldName) setActiveTab(newName);
+      }
+
+      setEditingWatcher(null);
+    } catch (err) {
+      console.error("Failed to update watcher", err);
+    }
+  };
+
+  const handleDeleteItem = async (type, id) => {
+    const coll = type === 'category' ? 'categories' : 'services';
+    try {
+      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', coll, id));
+    } catch (err) { console.error(err); }
+  };
+
+  const handleDeleteShow = async (id) => {
+    try {
+      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'shows', id));
+    } catch (err) { console.error(err); }
+  };
+
+  const handleShare = () => {
+    const url = window.location.href;
+    const textArea = document.createElement("textarea");
+    textArea.value = url;
+    document.body.appendChild(textArea);
+    textArea.select();
+    try {
+      document.execCommand('copy');
+      setCopyFeedback(true);
+      setTimeout(() => setCopyFeedback(false), 2000);
+    } catch (err) { console.error(err); }
+    document.body.removeChild(textArea);
+  };
+
+  const handleDownload = () => {
+    const htmlContent = `<!DOCTYPE html><html><head><title>TV Guide</title></head><body><h1>TV Guide Export</h1><p>App ID: ${appId}</p></body></html>`;
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'TV_Guide_Cloud.html'; a.click();
+  };
+
+  const getStatusStyle = (status) => {
+    switch(status) {
+      case 'Airing': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+      case 'Returning': return 'bg-blue-100 text-blue-700 border-blue-200';
+      case 'Upcoming': return 'bg-purple-100 text-purple-700 border-purple-200';
+      case 'Season Break': return 'bg-slate-100 text-slate-700 border-slate-200';
+      default: return 'bg-gray-100 text-gray-700 border-gray-200';
+    }
+  };
+
+  const getStreamerStyle = (streamer) => {
+    const s = streamer?.toLowerCase() || '';
+    if (s.includes('netflix')) return 'bg-red-600 text-white';
+    if (s.includes('hulu')) return 'bg-green-500 text-black';
+    if (s.includes('peacock')) return 'bg-purple-600 text-white';
+    if (s.includes('paramount')) return 'bg-blue-600 text-white';
+    if (s.includes('prime')) return 'bg-cyan-500 text-white';
+    if (s.includes('apple')) return 'bg-slate-900 text-white';
+    if (s.includes('max')) return 'bg-indigo-600 text-white';
+    return 'bg-slate-200 text-slate-800';
+  };
+
+  const getWatcherIcon = (categoryName, size = 16) => {
+    const category = categories.find(c => c.name === categoryName);
+    const iconKey = category?.icon || 'user';
+    const IconComp = WATCHER_ICONS[iconKey] || User;
+    return <IconComp size={size} />;
+  };
+
+  if (!user) return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 font-sans">
+      <Tv className="animate-pulse text-indigo-600" size={48} />
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-24">
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-40 px-4 py-4 shadow-sm">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-indigo-600 rounded-xl text-white shadow-lg">
+              <Tv size={24} />
+            </div>
+            <div>
+              <h1 className="text-xl font-extrabold tracking-tight">TV Guide</h1>
+              <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Shared Watchlist</p>
+            </div>
+          </div>
+          
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <input 
+              type="text" placeholder="Search shows..." value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-slate-100 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button onClick={handleShare} className="p-2.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all relative">
+              {copyFeedback ? <Check size={20} className="text-emerald-500" /> : <Share2 size={20} />}
+            </button>
+            <button onClick={handleDownload} className="p-2.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all">
+              <Download size={20} />
+            </button>
+            <button onClick={() => setIsSettingsOpen(true)} className="p-2.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all">
+              <Settings size={20} />
+            </button>
+            <button 
+              onClick={() => setIsAddModalOpen(true)}
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg transition-all active:scale-95"
+            >
+              <Plus size={18} /> Add Show
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-6xl mx-auto px-4 py-8">
+        {/* User/Category Tabs */}
+        <div className="flex overflow-x-auto pb-4 gap-2 no-scrollbar mb-4">
+          <button onClick={() => setActiveTab('All')} className={`px-6 py-2.5 rounded-xl whitespace-nowrap text-sm font-bold transition-all ${activeTab === 'All' ? 'bg-slate-900 text-white shadow-xl translate-y-[-2px]' : 'bg-white text-slate-500 hover:bg-slate-200 border border-slate-200'}`}>All</button>
+          {categories.map(cat => (
+            <button key={cat.id} onClick={() => setActiveTab(cat.name)} className={`px-6 py-2.5 rounded-xl whitespace-nowrap text-sm font-bold transition-all flex items-center gap-2 ${activeTab === cat.name ? 'bg-slate-900 text-white shadow-xl translate-y-[-2px]' : 'bg-white text-slate-500 hover:bg-slate-200 border border-slate-200'}`}>
+              <span className={activeTab === cat.name ? 'text-white' : 'text-slate-400'}>{getWatcherIcon(cat.name)}</span> {cat.name}
+            </button>
+          ))}
+        </div>
+
+        {/* Service Filters */}
+        <div className="flex items-center gap-3 mb-8 overflow-x-auto pb-2 no-scrollbar">
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1"><Filter size={12} /> Service</span>
+          <button onClick={() => setStreamerFilter('All')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${streamerFilter === 'All' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-slate-400 border-slate-200'}`}>All</button>
+          {services.map(s => (
+            <button key={s.id} onClick={() => setStreamerFilter(s.name)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${streamerFilter === s.name ? 'bg-indigo-50 text-indigo-700 border-indigo-200 shadow-sm' : 'bg-white text-slate-400 border-slate-200'}`}>{s.name}</button>
+          ))}
+        </div>
+
+        {/* Shows Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          {filteredShows.length > 0 ? (
+            filteredShows.map((show) => (
+              <div key={show.id} className="group relative bg-white border border-slate-200 rounded-2xl p-5 hover:shadow-2xl hover:border-indigo-100 transition-all duration-300 flex flex-col h-full">
+                <div className="flex justify-between items-start mb-4">
+                  <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${getStreamerStyle(show.streamer)}`}>
+                    {show.streamer}
+                  </span>
+                  <button onClick={() => handleDeleteShow(show.id)} className="text-slate-300 hover:text-red-500 transition-colors p-1"><Trash2 size={16} /></button>
+                </div>
+                <h3 className="text-lg font-black text-slate-800 leading-tight mb-3 group-hover:text-indigo-600 transition-colors">{show.title}</h3>
+                <div className="space-y-3 mt-auto">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
+                      <Calendar size={14} className="text-slate-400" /> {show.day || 'TBD'}
+                    </div>
+                    {show.status && <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase border ${getStatusStyle(show.status)}`}>{show.status}</span>}
+                  </div>
+                  {show.date && (
+                    <div className="bg-amber-50 text-amber-700 p-2 rounded-lg border border-amber-100 text-[11px] font-black flex items-center gap-2">
+                      <Info size={14} /> Returns: {show.date}
+                    </div>
+                  )}
+                  <div className="pt-4 border-t border-slate-50 flex items-center justify-between">
+                    <div className={`flex items-center gap-1.5 text-xs font-bold ${show.category === 'Both' ? 'text-indigo-600' : 'text-slate-400'}`}>
+                      {getWatcherIcon(show.category, 14)} {show.category}
+                    </div>
+                    <CheckCircle size={16} className="text-slate-100 group-hover:text-emerald-500 transition-colors" />
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="col-span-full py-24 text-center">
+              <h3 className="text-xl font-black text-slate-800">No shows found</h3>
+              <p className="text-slate-400 mt-2">Try checking another category or service filter.</p>
+            </div>
+          )}
+        </div>
+      </main>
+
+      {/* Settings Modal */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col animate-in fade-in zoom-in duration-200">
+            <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-white sticky top-0">
+              <div className="flex items-center gap-3">
+                <Settings className="text-indigo-600" />
+                <h2 className="text-2xl font-black text-slate-900">App Settings</h2>
+              </div>
+              <button onClick={() => { setIsSettingsOpen(false); setEditingWatcher(null); }} className="text-slate-400 hover:text-slate-900"><X size={28} /></button>
+            </div>
+            <div className="p-8 overflow-y-auto space-y-12">
+              <section>
+                <h3 className="text-lg font-black text-slate-800 mb-1">Watchers & Categories</h3>
+                <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mb-4">Manage users and select their custom icons</p>
+                
+                <div className="grid grid-cols-1 gap-3 mb-6">
+                  {categories.map(cat => (
+                    <div key={cat.id} className="bg-slate-50 rounded-xl border border-slate-100 overflow-hidden">
+                      {editingWatcher?.id === cat.id ? (
+                        <form onSubmit={handleUpdateWatcher} className="p-4 bg-indigo-50/50 space-y-4">
+                          <div className="flex gap-2">
+                            <input 
+                              autoFocus
+                              type="text" 
+                              value={editingWatcher.name} 
+                              onChange={e => setEditingWatcher({...editingWatcher, name: e.target.value})}
+                              className="flex-1 px-4 py-2 bg-white border border-indigo-200 rounded-xl font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                            <button type="submit" className="p-2 bg-indigo-600 text-white rounded-xl shadow-lg">
+                              <Save size={20} />
+                            </button>
+                            <button type="button" onClick={() => setEditingWatcher(null)} className="p-2 bg-white border border-slate-200 text-slate-400 rounded-xl">
+                              <X size={20} />
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+                            {Object.keys(WATCHER_ICONS).map(iconKey => {
+                              const IconComp = WATCHER_ICONS[iconKey];
+                              return (
+                                <button 
+                                  key={iconKey}
+                                  type="button"
+                                  onClick={() => setEditingWatcher({...editingWatcher, icon: iconKey})}
+                                  className={`p-1.5 rounded-lg transition-all ${editingWatcher.icon === iconKey ? 'bg-indigo-600 text-white' : 'bg-white text-slate-400 border border-slate-100'}`}
+                                >
+                                  <IconComp size={14} />
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </form>
+                      ) : (
+                        <div className="flex items-center justify-between p-3 group">
+                          <div className="flex items-center gap-3 text-slate-400">
+                            {getWatcherIcon(cat.name, 16)}
+                            <span className="font-bold text-slate-700">{cat.name}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button 
+                              onClick={() => setEditingWatcher({...cat})} 
+                              className="text-slate-300 hover:text-indigo-600 opacity-0 group-hover:opacity-100 transition-all p-1.5"
+                            >
+                              <Pencil size={16} />
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteItem('category', cat.id)} 
+                              className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all p-1.5"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {!editingWatcher && (
+                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Add New Watcher</label>
+                    <div className="flex gap-2 mb-4">
+                      <input type="text" placeholder="Name (e.g. Charlie)..." value={newItemName.category} onChange={e => setNewItemName({...newItemName, category: e.target.value})} className="flex-1 px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold outline-none focus:ring-2 focus:ring-indigo-500" />
+                      <button onClick={() => handleAddItem('category', newItemName.category, selectedWatcherIcon)} className="px-6 bg-indigo-600 text-white rounded-xl shadow-lg font-bold hover:bg-indigo-700">Add</button>
+                    </div>
+                    
+                    <div className="flex items-center gap-3 overflow-x-auto pb-2 no-scrollbar">
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Icon:</span>
+                      {Object.keys(WATCHER_ICONS).map(iconKey => {
+                        const IconComp = WATCHER_ICONS[iconKey];
+                        return (
+                          <button 
+                            key={iconKey}
+                            onClick={() => setSelectedWatcherIcon(iconKey)}
+                            className={`p-2 rounded-lg transition-all ${selectedWatcherIcon === iconKey ? 'bg-indigo-600 text-white shadow-md scale-110' : 'bg-white text-slate-400 border border-slate-200 hover:border-indigo-300'}`}
+                          >
+                            <IconComp size={16} />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </section>
+
+              <section>
+                <h3 className="text-lg font-black text-slate-800 mb-1">Streaming Services</h3>
+                <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mb-4">Manage platforms like Netflix or Hulu</p>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+                  {services.map(s => (
+                    <div key={s.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100 group">
+                      <span className="font-bold text-slate-700 truncate">{s.name}</span>
+                      <button onClick={() => handleDeleteItem('service', s.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all ml-2"><Trash2 size={14} /></button>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input type="text" placeholder="Add service..." value={newItemName.service} onChange={e => setNewItemName({...newItemName, service: e.target.value})} className="flex-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all" />
+                  <button onClick={() => handleAddItem('service', newItemName.service)} className="p-3 bg-indigo-600 text-white rounded-xl shadow-lg hover:bg-indigo-700 transition-all"><Plus size={20} /></button>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Show Modal */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md">
+          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center">
+              <h2 className="text-2xl font-black text-slate-900">Add New Show</h2>
+              <button onClick={() => setIsAddModalOpen(false)} className="text-slate-400 hover:text-slate-900"><X size={28} /></button>
+            </div>
+            <form onSubmit={handleAddShow} className="p-8 space-y-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Show Title</label>
+                  <input required type="text" value={newShow.title} onChange={e => setNewShow({...newShow, title: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl border border-slate-200 focus:ring-4 focus:ring-indigo-500/10 outline-none font-bold" placeholder="e.g. Stranger Things" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Service</label>
+                    <select value={newShow.streamer} onChange={e => setNewShow({...newShow, streamer: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl border border-slate-200 font-bold outline-none">
+                      {services.map(s => <option key={s.id}>{s.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Watcher</label>
+                    <select value={newShow.category} onChange={e => setNewShow({...newShow, category: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl border border-slate-200 font-bold outline-none">
+                      {categories.map(c => <option key={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Air Day</label>
+                    <input type="text" value={newShow.day} onChange={e => setNewShow({...newShow, day: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl border border-slate-200 font-bold outline-none" placeholder="e.g. Sunday" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Status</label>
+                    <select value={newShow.status} onChange={e => setNewShow({...newShow, status: e.target.value})} className="w-full px-4 py-3 bg-slate-50 rounded-xl border border-slate-200 font-bold outline-none">
+                      <option>Airing</option><option>Returning</option><option>Upcoming</option><option>Season Break</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <button type="submit" className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black text-lg transition-all shadow-xl active:scale-95">Add to Guide</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <footer className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t border-slate-200 px-6 py-4 text-[10px] font-black uppercase tracking-widest flex justify-between items-center text-slate-500 z-30 shadow-sm">
+        <div className="flex gap-6">
+          <span className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-indigo-500"></div> Total: {shows.length}</span>
+        </div>
+        <div className="flex items-center gap-2 text-emerald-600">
+          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div> Cloud Active
+        </div>
+      </footer>
+
+      <style>{`
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      `}</style>
+    </div>
+  );
+}
